@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { auth } from '../firebaseConfig';
 import Sidebar from '../components/Sidebar';
-import { db, collection, addDoc, query, where, orderBy, onSnapshot } from '../firebaseConfig'; // Import Firestore functions
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage'; // Import Firebase Storage functions
+import { db, collection, query, where, orderBy, onSnapshot } from '../firebaseConfig'; // Import Firestore functions
 
 interface User {
   id: string;
@@ -16,7 +15,7 @@ interface Message {
   receiverUid: string;
   message: string;
   timestamp: string;
-  fileUrl?: string; // Optional fileUrl property
+  imageUrl?: string; // Optional fileUrl property
 }
 
 const Chat = () => {
@@ -25,22 +24,22 @@ const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [messageInput, setMessageInput] = useState('');
-  const [user, setUser] = useState<any>(null);
+  // const [user, setUser] = useState<any>(null);
   const [file, setFile] = useState<File | null>(null); // State for file selection
 
-  useEffect(() => {
-    // Listen for auth state changes
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);  // set the logged in user
-      } else {
-        setUser(null); // no user, handle accordingly
-      }
-    });
+  // useEffect(() => {
+  //   // Listen for auth state changes
+  //   const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+  //     if (currentUser) {
+  //       setUser(currentUser);  // set the logged in user
+  //     } else {
+  //       setUser(null); // no user, handle accordingly
+  //     }
+  //   });
 
-    // Cleanup listener on unmount
-    return () => unsubscribe();
-  }, []);
+  //   // Cleanup listener on unmount
+  //   return () => unsubscribe();
+  // }, []);
 
   useEffect(() => {
     // Fetch the list of users
@@ -97,35 +96,49 @@ const Chat = () => {
   const sendMessage = async () => {
     if ((messageInput.trim() || file) && selectedUser) {
       try {
-        let fileUrl: string | undefined = undefined;
-
-        // If a file is selected, upload it to Firebase Storage
+        const formData = new FormData();
+  
+        // Append the message data and the selected image to the FormData object
+        formData.append('senderUid', auth.currentUser?.uid!);
+        formData.append('receiverUid', selectedUser);
+        formData.append('message', messageInput);
+  
         if (file) {
-          const storage = getStorage();
-          const storageRef = ref(storage, `chat_files/${file.name}`);
-          const uploadSnapshot = await uploadBytes(storageRef, file); // Upload file
-          fileUrl = await getDownloadURL(uploadSnapshot.ref); // Get the download URL of the uploaded file
+          formData.append('image', file);  // Attach the file to the FormData object
         }
-
-        const messageData: Message = {
-          senderUid: auth.currentUser?.uid!,
-          receiverUid: selectedUser,
-          message: messageInput,
-          timestamp: new Date().toISOString(),
-          fileUrl, // Attach the file URL to the message data if there was a file
-        };
-
-        // Send message to Firestore
-        await addDoc(collection(db, 'messages'), messageData);
-
-        // Clear input and file after sending message
-        setMessageInput('');
-        setFile(null);
+  
+        // Send the form data (which contains the image and message) to the backend
+        const response = await fetch('http://localhost:4000/send-message', {
+          method: 'POST',
+          body: formData, // Send the form data (image + message)
+        });
+  
+        const responseData = await response.json();
+  
+        if (responseData.imageUrl) {
+          console.log("Image uploaded:", responseData.imageUrl);
+        }
+  
+        // Handle the response after sending the message
+        if (responseData.message === 'Message sent successfully!') {
+          // Clear the input and file after sending the message
+          setMessageInput('');
+          setFile(null);
+        } else {
+          console.error('Error sending message:', responseData.message);
+        }
       } catch (error) {
         console.error('Error sending message:', error);
       }
     }
   };
+  
+  
+  
+
+  
+  
+
 
   const filteredMessages = messages.filter(
     (msg) =>
@@ -142,44 +155,68 @@ const Chat = () => {
         ) : selectedUser ? (
           <>
             <h3 style={topHeader}>Chat with {users.find((user) => user.id === selectedUser)?.email}</h3>
-            <div style={messagesContainerStyle}>
-              {filteredMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  style={{
-                    textAlign: msg.senderUid === auth.currentUser?.email ? 'right' : 'left',
-                    padding: '5px 10px',
-                    backgroundColor: msg.senderUid === auth.currentUser?.email ? '#007bff' : '#f1f1f1',
-                    color: msg.senderUid === auth.currentUser?.email ? 'white' : 'black',
-                    margin: '5px 0',
-                    borderRadius: msg.senderUid === auth.currentUser?.email ? '10px 10px 0 10px' : '0 10px 10px 10px',
-                    maxWidth: '70%',
-                    marginLeft: msg.senderUid === auth.currentUser?.email ? 'auto' : '0',
-                    boxShadow: msg.senderUid === auth.currentUser?.email ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none',
-                  }}
-                >
-                  <strong>{msg.senderUid}: </strong>{msg.message}
-                  {msg.fileUrl && (
-                    <div>
-                      <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer">
-                        Download file
-                      </a>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div style={{ ...messagesContainerStyle, display: 'flex', flexDirection: 'column', padding: '10px' }}>
+              {filteredMessages.map((msg, index) => {
+                // Log the comparison result here, before rendering JSX
+
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      justifyContent: msg.senderUid === auth.currentUser?.email ? 'flex-end' : 'flex-start',
+                      padding: '5px 10px',
+                      backgroundColor: msg.senderUid === auth.currentUser?.email ? '#007bff' : '#f1f1f1',
+                      color: msg.senderUid === auth.currentUser?.email ? 'white' : 'black',
+                      margin: '5px 0',
+                      borderRadius: msg.senderUid === auth.currentUser?.email ? '10px 10px 0 10px' : '0 10px 10px 10px',
+                      maxWidth: '70%',
+                      boxShadow: msg.senderUid === auth.currentUser?.email ? '0 2px 4px rgba(0, 0, 0, 0.1)' : 'none',
+                    }}
+                  >
+                    {msg.senderUid === auth.currentUser?.uid ? (
+                      <div style={{ display: 'inline-block', marginLeft: 'auto' }}>
+                        <div><strong>{msg.senderUid}</strong> : {msg.message}</div>
+                        {msg.imageUrl && (
+                          <div className="message-image">
+                            <img
+                              src={msg.imageUrl}
+                              alt="Message attachment"
+                              style={{ maxWidth: '300px', maxHeight: '300px', objectFit: 'contain' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'inline-block' }}>
+                        <div><strong>{msg.senderUid}</strong> : {msg.message}</div>
+                        {msg.imageUrl && (
+                          <div className="message-image">
+                            <img
+                              src={msg.imageUrl}
+                              alt="Message attachment"
+                              style={{ maxWidth: '300px', maxHeight: '300px', objectFit: 'contain' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
             <textarea
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               placeholder="Type a message"
               style={textareaStyle}
             />
-            {/* <input
+            <input
               type="file"
               onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
               style={fileInputStyle}
-            /> */}
+            />
             <button onClick={sendMessage} style={sendButtonStyle}>Send</button>
           </>
         ) : (

@@ -18,15 +18,11 @@ const firebaseConfig = {
 // Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with ignoreUndefinedProperties enabled
-const db = initializeFirestore(app, {
-  ignoreUndefinedProperties: true,  // This option will ignore undefined fields
-});
+// Initialize Firebase Messaging
+export const messaging = getMessaging(app);
 
-// Firebase services
-export const auth = getAuth(app); 
-export const storage = getStorage(app);  // Firebase Storage
-export const messaging = getMessaging(app); 
+export const auth = getAuth(app);
+export const storage = getStorage(app);
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 
-// Export functions from Firestore that you may use in your app
-export { signInWithCustomToken, db, collection, addDoc, query, where, orderBy, onSnapshot };
+export { signInWithCustomToken, collection, addDoc, query, where, orderBy, onSnapshot };
